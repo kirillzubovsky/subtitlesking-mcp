@@ -268,6 +268,20 @@ burning_subtitles → subtitles_burned   (video ready)
 
 ## FAQ
 
+**I'm new to all of this. What do I actually do?**
+Easiest path: install [Claude Code](https://docs.anthropic.com/claude-code)
+or [Claude Desktop](https://claude.ai/download), then run
+`claude mcp add --transport http subtitlesking https://brains.subtitlesking.com/mcp`
+(or paste the JSON snippet from
+[Configure](#configure-your-mcp-client) into your client's MCP config
+file). You don't need to download this binary, install Go, or install
+ffmpeg. Restart your client, and Claude can subtitle videos for you
+in normal conversation.
+
+**Do I need to know Go?**
+No. Use the prebuilt binary (or just the hosted URL). You only need
+Go if you want to build the binary from source yourself.
+
 **What is the Model Context Protocol (MCP)?**
 MCP is an open protocol from Anthropic that standardizes how AI
 agents talk to external tools. Any MCP-compatible client — Claude
