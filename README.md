@@ -1,5 +1,10 @@
 # subtitlesking-mcp
 
+**Companion repo for [SubtitlesKing.com](https://www.subtitlesking.com)** — the
+AI video subtitle service this MCP plugs into. Try it in the browser at
+[subtitlesking.com](https://www.subtitlesking.com), or use this MCP to drive
+the same pipeline from Claude / Cursor / Windsurf.
+
 > **MCP server for AI-generated video subtitles.** Give Claude Code,
 > Claude Desktop, Cursor, Windsurf — any [Model Context Protocol][mcp]
 > client — direct access to automatic subtitle generation. Powered by
