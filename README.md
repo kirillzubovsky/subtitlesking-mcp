@@ -58,14 +58,31 @@ and this binary expose identical behavior by construction.
 
 | Tool | What it does |
 |---|---|
-| `start_upload` | Reserve an upload slot for a `filename`. Returns `auth_token`, `upload_url`, and a copy-paste `curl` example. |
+| `start_upload` | Reserve an upload slot for a `filename`. Optional `quality` arg (`low` / `medium` / `high`) selects the Whisper model. Returns `auth_token`, `upload_url`, and a copy-paste `curl` example. |
 | `get_video_status` | Look up status by `auth_token`. Returns queue position, plus `transcript_url` once SRT is ready and `download_url` once the burned video is ready. |
 | `get_transcript` | Return the SRT subtitle transcript inline. Available a couple of minutes before the burned video. |
 | `get_download_url` | Return a 24-hour presigned URL for the finished, subtitle-burned video. The agent fetches the file out-of-band. |
 
+### Quality / speed trade-off
+
+The optional `quality` argument on `start_upload` lets the user pick a
+specific accuracy/speed point per video. `medium` is the default and a
+sensible balance for most uploads; agents can offer the user the choice
+and pass through their answer.
+
+| `quality` | Whisper model | Typical 2-min clip on CPU | When to use |
+|---|---|---|---|
+| `low` | `base` (~74M params) | under 1 min | Drafts, search indexing, content sketches. Rougher transcripts. |
+| `medium` *(default)* | `medium` (~769M params) | 3–6 min | General-purpose. Good accuracy, reasonable speed. |
+| `high` | `large` (~1.5B params) | 7–15 min | Published content, accents, technical jargon, noisy audio. Best accuracy. |
+
+Omit `quality` to use the deploy-wide default (configurable on
+self-hosted backends via `SUBTITLESKING_WHISPER_MODEL`).
+
 Pipeline: **upload → ffmpeg compression → OpenAI Whisper transcription
-→ ffmpeg subtitle burn-in**. Typical 3–10 min end-to-end; SRT is
-usually ready 1–2 min earlier.
+→ ffmpeg subtitle burn-in**. End-to-end time depends on the chosen
+quality (see table). The transcript is usually ready 1–2 min before the
+burned video.
 
 ## Requirements
 
@@ -236,9 +253,11 @@ claude mcp add subtitlesking /usr/local/bin/subtitlesking-mcp
 ## Example agent flow
 
 ```
-1. start_upload({ filename: "clip.mp4" })
+1. start_upload({ filename: "clip.mp4", quality: "medium" })
    → upload_url:   https://brains.subtitlesking.com/upload?presignedToken=…
      auth_token:   12345678
+     quality:      medium
+     expected_processing_time: 3–6 min
      curl_example: curl -F file=@/path/to/clip.mp4 '<upload_url>'
 
 2. (the agent runs the curl itself; bytes go disk-to-server)
@@ -333,9 +352,15 @@ dependencies** (whereas this bridge has none):
   [from source](https://github.com/openai/whisper). Whisper itself
   needs Python 3.8+ and PyTorch.
 - **Go 1.22+** to build and run the upload server.
-- **A few GB of disk** for Whisper model weights (the `large` model
-  used by default is ~3 GB).
-- **A reasonably beefy CPU or GPU.** Whisper-large is the slow step.
+- **A few GB of disk** for Whisper model weights. The default is the
+  `medium` model (~1.5 GB); switching to `large` adds ~1.5 GB more.
+- **A reasonably beefy CPU or GPU.** Whisper is the slow step.
+
+The backend exposes a `SUBTITLESKING_WHISPER_MODEL` env var that picks
+the default model when an upload doesn't specify a `quality` arg. Set
+it on the systemd unit (or your container env) to `base`, `small`,
+`medium`, or `large`. Per-upload overrides via the MCP `quality` arg
+always take precedence over this default.
 
 Once the backend is running locally, point this MCP bridge at it:
 
