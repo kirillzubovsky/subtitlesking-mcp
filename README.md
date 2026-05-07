@@ -1,36 +1,66 @@
 # subtitlesking-mcp
 
+> **MCP server for AI-generated video subtitles.** Give Claude Code,
+> Claude Desktop, Cursor, Windsurf — any [Model Context Protocol][mcp]
+> client — direct access to automatic subtitle generation. Powered by
+> OpenAI Whisper transcription and ffmpeg burn-in via
+> [Subtitles King](https://www.subtitlesking.com).
+
 [![Release](https://img.shields.io/github/v/release/kirillzubovsky/subtitlesking-mcp?style=flat-square)](https://github.com/kirillzubovsky/subtitlesking-mcp/releases)
+[![Downloads](https://img.shields.io/github/downloads/kirillzubovsky/subtitlesking-mcp/total?style=flat-square)](https://github.com/kirillzubovsky/subtitlesking-mcp/releases)
+[![Go version](https://img.shields.io/github/go-mod/go-version/kirillzubovsky/subtitlesking-mcp?style=flat-square)](./go.mod)
 [![License](https://img.shields.io/github/license/kirillzubovsky/subtitlesking-mcp?style=flat-square)](./LICENSE)
+[![MCP](https://img.shields.io/badge/MCP-compatible-blue?style=flat-square)](https://modelcontextprotocol.io)
 
-A [Model Context Protocol](https://modelcontextprotocol.io) server that lets
-any MCP-compatible AI agent — Claude Code, Claude Desktop, Cursor, Windsurf,
-others — add AI-generated subtitles to videos via
-[Subtitles King](https://www.subtitlesking.com).
+**Bytes never travel through the AI agent's context.** Most MCP video
+tools fail on real files because they try to base64-encode the video
+into a tool-call payload — a 100 MB clip becomes 130+ MB of base64 that
+must fit inside the model's context window. This server avoids that
+entirely: `start_upload` returns a presigned upload URL and the agent
+uploads the file out-of-band with `curl`. Same on the way out via
+`get_download_url`. The upload tool just *works*, regardless of file
+size or model context.
 
-**Bytes never travel through the agent's context.** The MCP returns a
-presigned upload URL and the agent uploads the video out-of-band with
-`curl`. Same for download. This means the upload tool actually works at
-real video sizes — not just whatever fits in the LLM's context window.
+This binary is a thin **JSON-RPC 2.0 stdio↔HTTP bridge**: every request
+read from stdin is POSTed verbatim to `<SUBTITLESKING_URL>/mcp`, and
+the response is written back to stdout. All tool semantics live
+server-side, so the hosted endpoint at
+[brains.subtitlesking.com/mcp](https://brains.subtitlesking.com/mcp)
+and this binary expose identical behavior by construction. Open
+source, MIT-licensed, **zero non-stdlib dependencies**, runs on
+**macOS, Linux, and Windows**.
 
-This binary is a thin **JSON-RPC stdio↔HTTP bridge**: every request from
-stdin is POSTed verbatim to `<SUBTITLESKING_URL>/mcp`, and the response is
-written back to stdout. All tool semantics live server-side. The hosted
-endpoint at `https://brains.subtitlesking.com/mcp` and this binary expose
-identical behavior by construction.
+## Why use this
+
+- **Subtitle videos through normal conversation.** "Claude, subtitle
+  this clip" → Claude does the upload, polling, and download itself.
+  No copy-paste, no separate dashboard, no five-tab workflow.
+- **Real-size video uploads.** The MCP hands the agent a presigned URL
+  instead of stuffing video bytes into the tool call. Agents can
+  subtitle 100 MB videos through a model with an 8K context window.
+- **Burn-in subtitles, baked SRT, or both.** The pipeline produces a
+  hardcoded subtitle video *and* a standalone SRT transcript — take
+  either or both, they're independent products.
+- **Transcript ready first.** Whisper's SRT becomes available a
+  couple of minutes before the burned video, so agents that only need
+  the text don't have to wait for the ffmpeg burn-in step.
+- **Self-host if you want.** Point `SUBTITLESKING_URL` at your own
+  upload server (the full backend is at
+  [github.com/kz-dev/subtitlesking](https://github.com/kz-dev/subtitlesking))
+  for fully air-gapped, unlimited use.
 
 ## Tools
 
-| Tool | Description |
+| Tool | What it does |
 |---|---|
 | `start_upload` | Reserve an upload slot for a `filename`. Returns `auth_token`, `upload_url`, and a copy-paste `curl` example. |
 | `get_video_status` | Look up status by `auth_token`. Returns queue position, plus `transcript_url` once SRT is ready and `download_url` once the burned video is ready. |
-| `get_transcript` | Return the SRT transcript inline (it's small). Available a couple of minutes before the burned video. |
+| `get_transcript` | Return the SRT subtitle transcript inline. Available a couple of minutes before the burned video. |
 | `get_download_url` | Return a 24-hour presigned URL for the finished, subtitle-burned video. The agent fetches the file out-of-band. |
 
-Pipeline: upload → ffmpeg compression → Whisper transcription → ffmpeg
-subtitle burn-in. Typical 3–10 min end-to-end; transcript is usually ready
-1–2 min earlier.
+Pipeline: **upload → ffmpeg compression → OpenAI Whisper transcription
+→ ffmpeg subtitle burn-in**. Typical 3–10 min end-to-end; SRT is
+usually ready 1–2 min earlier.
 
 ## Install
 
@@ -38,13 +68,16 @@ subtitle burn-in. Typical 3–10 min end-to-end; transcript is usually ready
 
 Grab a binary from the
 [releases page](https://github.com/kirillzubovsky/subtitlesking-mcp/releases),
-unpack, and put it on your `PATH`:
+unpack, and put it on your `PATH`. Builds are published for **macOS
+(Apple Silicon and Intel)**, **Linux (amd64 and arm64)**, and
+**Windows (amd64)**.
 
 ```bash
-# macOS arm64 example
+# macOS Apple Silicon
 curl -L https://github.com/kirillzubovsky/subtitlesking-mcp/releases/latest/download/subtitlesking-mcp-darwin-arm64.tar.gz \
   | tar -xz
 sudo mv subtitlesking-mcp /usr/local/bin/
+subtitlesking-mcp --version
 ```
 
 ### From source
@@ -56,9 +89,9 @@ go build -o subtitlesking-mcp .
 sudo mv subtitlesking-mcp /usr/local/bin/
 ```
 
-The binary has zero non-stdlib dependencies.
+Requires Go 1.22+. Zero non-stdlib dependencies.
 
-## Configure your client
+## Configure your MCP client
 
 ### Claude Code
 
@@ -70,7 +103,7 @@ claude mcp add --transport http subtitlesking https://brains.subtitlesking.com/m
 claude mcp add subtitlesking /usr/local/bin/subtitlesking-mcp
 ```
 
-### Claude Desktop / Cursor / Windsurf
+### Claude Desktop / Cursor / Windsurf / Zed / others
 
 ```json
 {
@@ -82,7 +115,7 @@ claude mcp add subtitlesking /usr/local/bin/subtitlesking-mcp
 }
 ```
 
-### Pointing at a self-hosted upload server
+### Self-hosted backend
 
 ```json
 {
@@ -111,7 +144,7 @@ claude mcp add subtitlesking /usr/local/bin/subtitlesking-mcp
      auth_token:   12345678
      curl_example: curl -F file=@/path/to/clip.mp4 '<upload_url>'
 
-2. (the agent runs the curl itself; bytes go disk→server)
+2. (the agent runs the curl itself; bytes go disk-to-server)
 
 3. get_video_status({ auth_token: "12345678" })
    → status: srt_generated
@@ -129,22 +162,69 @@ claude mcp add subtitlesking /usr/local/bin/subtitlesking-mcp
 7. (the agent runs the curl itself)
 ```
 
-You can take only the transcript, only the burned video, or both — they're
-independent products.
+## Status states
+
+```
+pending_upload    → slot reserved, bytes not yet received
+new               → bytes received, queued for processing
+compressing       → compressed
+generating_srt    → srt_generated   (transcript ready)
+burning_subtitles → subtitles_burned   (video ready)
+```
+
+`error_*` is emitted if any step fails.
+
+## FAQ
+
+**What is the Model Context Protocol (MCP)?**
+MCP is an open protocol from Anthropic that standardizes how AI
+agents talk to external tools. Any MCP-compatible client — Claude
+Code, Claude Desktop, Cursor, Windsurf, Zed, Continue, and others —
+can use this server without writing integration code.
+
+**Do I need an API key?**
+No. The bridge forwards every request to `SUBTITLESKING_URL/mcp`,
+which mints presigned URLs internally. Free-tier limits apply on the
+hosted backend; self-host for unlimited use.
+
+**Can I use this with a long video?**
+The free tier caps uploads at 100 MB. Self-host for any size — the
+upload happens out-of-band, so file size never depends on the LLM's
+context window.
+
+**Why a separate binary if there's a hosted MCP?**
+Some MCP clients don't yet speak streamable-HTTP, and stdio is the
+universal transport. The binary also lets you point at a self-hosted
+upload server with one env var.
+
+**What models drive the pipeline?**
+OpenAI Whisper (large model) for speech-to-text, ffmpeg for video
+compression and subtitle burn-in.
 
 ## Self-hosting the upload server
 
-The full upload server (Whisper transcription, ffmpeg compression, ffmpeg
-subtitle burn-in) lives at
+The full upload server (Whisper transcription, ffmpeg compression,
+ffmpeg subtitle burn-in, REST API, web frontend) lives at
 [github.com/kz-dev/subtitlesking](https://github.com/kz-dev/subtitlesking).
-Run it locally and set `SUBTITLESKING_URL=http://localhost:8080` to bridge
-this binary to your own backend.
+Run it locally, set `SUBTITLESKING_URL=http://localhost:8080`, and
+this binary bridges your MCP client to it.
+
+## Related
+
+- [Subtitles King](https://www.subtitlesking.com) — the product.
+- [Subtitles King MCP docs](https://www.subtitlesking.com/docs/mcp) — full reference.
+- [Self-host guide](https://www.subtitlesking.com/docs/self-host).
+- [Hosted vs self-host comparison](https://www.subtitlesking.com/vs/hosted-vs-self-hosted-mcp).
 
 ## Protocol
 
-JSON-RPC 2.0 over stdio (newline-delimited messages). Spec:
-[modelcontextprotocol.io](https://modelcontextprotocol.io).
+JSON-RPC 2.0. The stdio binary uses newline-delimited JSON-RPC over
+stdin/stdout. The hosted MCP uses streamable-HTTP: POST one request,
+receive one response. Spec:
+[modelcontextprotocol.io][mcp].
 
 ## License
 
 [MIT](./LICENSE).
+
+[mcp]: https://modelcontextprotocol.io
