@@ -1,0 +1,12 @@
+# Built binaries
+/subtitlesking-mcp
+/subtitlesking-mcp.exe
+/dist/
+/bin/
+
+# Editor / OS noise
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
