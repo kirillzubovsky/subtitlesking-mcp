@@ -62,34 +62,126 @@ Pipeline: **upload → ffmpeg compression → OpenAI Whisper transcription
 → ffmpeg subtitle burn-in**. Typical 3–10 min end-to-end; SRT is
 usually ready 1–2 min earlier.
 
+## Requirements
+
+**You do NOT need to install Go, ffmpeg, Whisper, Python, or anything
+else** to use this MCP server with the hosted backend. The prebuilt
+binary is self-contained.
+
+| What you want to do | What you need installed |
+|---|---|
+| Use the hosted MCP via URL (no binary at all) | Just an MCP client (Claude Code / Desktop / Cursor / Windsurf) |
+| Use the prebuilt binary | The binary itself + `curl` (already on macOS, Linux, Windows 10+) |
+| Build the binary from source | [Go 1.22+](https://go.dev/dl/) |
+| **Self-host the full backend** (ffmpeg + Whisper) | See [github.com/kz-dev/subtitlesking](https://github.com/kz-dev/subtitlesking) — that's a separate repo |
+
+The video transcoding tools (**ffmpeg**, **OpenAI Whisper**, Python)
+run on the *server*, not your machine. When you use the hosted MCP,
+those run on `brains.subtitlesking.com`. When you self-host, they run
+on whichever server you set up.
+
 ## Install
 
-### Prebuilt binary (recommended)
+### Option 1 — Use the hosted MCP (zero install)
 
-Grab a binary from the
-[releases page](https://github.com/kirillzubovsky/subtitlesking-mcp/releases),
-unpack, and put it on your `PATH`. Builds are published for **macOS
-(Apple Silicon and Intel)**, **Linux (amd64 and arm64)**, and
-**Windows (amd64)**.
+If you just want to subtitle videos through Claude / Cursor /
+Windsurf, you don't need to download this binary at all. Register the
+hosted URL with your client and skip to the [Configure](#configure-your-mcp-client)
+section:
 
 ```bash
-# macOS Apple Silicon
+claude mcp add --transport http subtitlesking https://brains.subtitlesking.com/mcp
+```
+
+Use this binary if your MCP client only speaks stdio (some older
+versions of Claude Desktop, for example), or if you want to point at a
+self-hosted backend.
+
+### Option 2 — Prebuilt binary (recommended for stdio clients)
+
+Builds are published for **macOS (Apple Silicon and Intel)**, **Linux
+(amd64 and arm64)**, and **Windows (amd64)** on the
+[releases page](https://github.com/kirillzubovsky/subtitlesking-mcp/releases).
+
+#### macOS (Apple Silicon)
+
+```bash
 curl -L https://github.com/kirillzubovsky/subtitlesking-mcp/releases/latest/download/subtitlesking-mcp-darwin-arm64.tar.gz \
   | tar -xz
 sudo mv subtitlesking-mcp /usr/local/bin/
 subtitlesking-mcp --version
 ```
 
-### From source
+#### macOS (Intel)
+
+```bash
+curl -L https://github.com/kirillzubovsky/subtitlesking-mcp/releases/latest/download/subtitlesking-mcp-darwin-amd64.tar.gz \
+  | tar -xz
+sudo mv subtitlesking-mcp /usr/local/bin/
+```
+
+#### Linux (amd64)
+
+```bash
+curl -L https://github.com/kirillzubovsky/subtitlesking-mcp/releases/latest/download/subtitlesking-mcp-linux-amd64.tar.gz \
+  | tar -xz
+sudo mv subtitlesking-mcp /usr/local/bin/
+```
+
+#### Linux (arm64, e.g. Raspberry Pi 4 / 5, Apple Silicon Linux VMs)
+
+```bash
+curl -L https://github.com/kirillzubovsky/subtitlesking-mcp/releases/latest/download/subtitlesking-mcp-linux-arm64.tar.gz \
+  | tar -xz
+sudo mv subtitlesking-mcp /usr/local/bin/
+```
+
+#### Windows (PowerShell)
+
+```powershell
+Invoke-WebRequest -Uri https://github.com/kirillzubovsky/subtitlesking-mcp/releases/latest/download/subtitlesking-mcp-windows-amd64.zip -OutFile subtitlesking-mcp.zip
+Expand-Archive subtitlesking-mcp.zip
+# Move subtitlesking-mcp.exe somewhere on your PATH
+```
+
+> **macOS Gatekeeper warning?** If macOS refuses to launch the
+> downloaded binary the first time, run
+> `xattr -d com.apple.quarantine /usr/local/bin/subtitlesking-mcp`
+> once and try again.
+
+### Option 3 — Build from source
+
+You need [Go 1.22 or newer](https://go.dev/dl/). If you don't have Go
+yet:
+
+```bash
+# macOS (Homebrew)
+brew install go
+
+# Ubuntu / Debian
+sudo apt-get update && sudo apt-get install -y golang-go
+
+# Fedora
+sudo dnf install -y golang
+
+# Arch
+sudo pacman -S go
+
+# Windows: download installer from https://go.dev/dl/
+```
+
+Then:
 
 ```bash
 git clone https://github.com/kirillzubovsky/subtitlesking-mcp
 cd subtitlesking-mcp
 go build -o subtitlesking-mcp .
 sudo mv subtitlesking-mcp /usr/local/bin/
+subtitlesking-mcp --version
 ```
 
-Requires Go 1.22+. Zero non-stdlib dependencies.
+Zero non-stdlib dependencies — no `go.sum`, no `vendor/` tree, no
+package downloads. The build is offline-capable once you have Go.
 
 ## Configure your MCP client
 
@@ -203,11 +295,41 @@ compression and subtitle burn-in.
 
 ## Self-hosting the upload server
 
-The full upload server (Whisper transcription, ffmpeg compression,
-ffmpeg subtitle burn-in, REST API, web frontend) lives at
+If you want to run the entire pipeline on your own hardware — for
+privacy, regulated workloads, or just unlimited use — clone the
+backend repo:
 [github.com/kz-dev/subtitlesking](https://github.com/kz-dev/subtitlesking).
-Run it locally, set `SUBTITLESKING_URL=http://localhost:8080`, and
-this binary bridges your MCP client to it.
+
+The backend is what actually does the work, and **it has real system
+dependencies** (whereas this bridge has none):
+
+- **ffmpeg** for video compression and subtitle burn-in.
+  - macOS: `brew install ffmpeg`
+  - Ubuntu / Debian: `sudo apt-get install ffmpeg`
+  - Fedora: `sudo dnf install ffmpeg`
+  - Windows: `winget install Gyan.FFmpeg` or
+    [download from ffmpeg.org](https://ffmpeg.org/download.html)
+- **OpenAI Whisper** for speech-to-text. Install with pip
+  (`pip install -U openai-whisper`) or
+  [from source](https://github.com/openai/whisper). Whisper itself
+  needs Python 3.8+ and PyTorch.
+- **Go 1.22+** to build and run the upload server.
+- **A few GB of disk** for Whisper model weights (the `large` model
+  used by default is ~3 GB).
+- **A reasonably beefy CPU or GPU.** Whisper-large is the slow step.
+
+Once the backend is running locally, point this MCP bridge at it:
+
+```json
+{
+  "mcpServers": {
+    "subtitlesking": {
+      "command": "/usr/local/bin/subtitlesking-mcp",
+      "env": { "SUBTITLESKING_URL": "http://localhost:8080" }
+    }
+  }
+}
+```
 
 ## Related
 
