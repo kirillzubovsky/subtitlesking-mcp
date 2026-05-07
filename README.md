@@ -26,8 +26,8 @@ read from stdin is POSTed verbatim to `<SUBTITLESKING_URL>/mcp`, and
 the response is written back to stdout. All tool semantics live
 server-side, so the hosted endpoint at
 [brains.subtitlesking.com/mcp](https://brains.subtitlesking.com/mcp)
-and this binary expose identical behavior by construction. Open
-source, MIT-licensed, **zero non-stdlib dependencies**, runs on
+and this binary expose identical behavior by construction.
+**Open-source**, MIT-licensed, **zero non-stdlib dependencies**, runs on
 **macOS, Linux, and Windows**.
 
 ## Why use this
@@ -226,5 +226,12 @@ receive one response. Spec:
 ## License
 
 [MIT](./LICENSE).
+
+## Author
+
+Built and maintained by [Kirill Zubovsky](https://kirillzubovsky.com).
+Other projects, posts, and how to reach me are at
+[kirillzubovsky.com](https://kirillzubovsky.com). Pull requests and
+issues welcome.
 
 [mcp]: https://modelcontextprotocol.io
