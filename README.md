@@ -109,11 +109,22 @@ systemd unit, and starts the service. See
 For local dev you can also just:
 
 ```bash
-brew install ffmpeg                         # or apt-get install ffmpeg
+# macOS — use the libass-enabled tap (default brew formula doesn't include
+# libass, which the subtitle burn-in step requires)
+brew tap homebrew-ffmpeg/ffmpeg
+brew install homebrew-ffmpeg/ffmpeg/ffmpeg
+
+# or, on Ubuntu / Debian:
+sudo apt-get install -y ffmpeg
+
 python3 -m venv sk
 sk/bin/pip install -r requirements.txt
 ./start.sh                                  # boots the server on :8080
 ```
+
+`start.sh` runs a preflight check that ffmpeg has the `subtitles`
+filter and refuses to boot if libass is missing — fail loudly rather
+than silently producing burn errors mid-pipeline.
 
 **2. Point the bridge at it.** Same binary as Mode 2, just with one
 env var:
@@ -242,9 +253,16 @@ across deploys — you won't lose in-flight jobs or your venv.
 ### Run from source locally (no systemd)
 
 ```bash
-# 1. Install ffmpeg
-brew install ffmpeg                 # macOS
-sudo apt-get install ffmpeg         # Ubuntu / Debian
+# 1. Install ffmpeg WITH libass — required for the subtitle burn-in
+brew tap homebrew-ffmpeg/ffmpeg                                # macOS
+brew install homebrew-ffmpeg/ffmpeg/ffmpeg                     # macOS
+
+sudo apt-get install -y ffmpeg                                 # Ubuntu / Debian
+sudo dnf install -y ffmpeg                                     # Fedora
+winget install Gyan.FFmpeg                                     # Windows
+
+# Verify libass is present (the line should match "subtitles"):
+ffmpeg -filters 2>&1 | grep -E '\bsubtitles\b'
 
 # 2. Bootstrap the Whisper venv (~5 min, ~5 GB)
 python3 -m venv sk
@@ -345,6 +363,27 @@ upload server with one env var.
 OpenAI Whisper for speech-to-text (model selectable via the `quality`
 arg or `SUBTITLESKING_WHISPER_MODEL`), ffmpeg for video compression
 and subtitle burn-in.
+
+**Burn step keeps failing on macOS — what's wrong?**
+Almost always the ffmpeg build. The default `brew install ffmpeg` on
+modern Homebrew doesn't include libass, which the subtitle burn-in
+requires. Verify with:
+
+```bash
+ffmpeg -filters 2>&1 | grep -E '\bsubtitles\b'
+```
+
+If that prints nothing, install the libass-enabled tap:
+
+```bash
+brew uninstall ffmpeg
+brew tap homebrew-ffmpeg/ffmpeg
+brew install homebrew-ffmpeg/ffmpeg/ffmpeg
+```
+
+The transcript (SRT) is still produced when burn fails — `get_transcript`
+serves it regardless of pipeline status, since transcript and burned
+video are independent products.
 
 ## Related
 
