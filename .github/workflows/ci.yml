@@ -14,9 +14,20 @@ jobs:
         with:
           go-version: '1.22'
           check-latest: true
+
+      # Static analysis on the whole module.
       - run: go vet ./...
+
+      # Build everything.
       - run: go build ./...
+
+      # Smoke-test the bridge binary — it should respond to --version.
       - run: |
-          # Smoke test: bridge should respond to --version
-          go build -o /tmp/subtitlesking-mcp .
+          go build -o /tmp/subtitlesking-mcp ./cmd/mcp
           /tmp/subtitlesking-mcp --version
+
+      # Build the upload-server binary (CGO for sqlite). Compile-only —
+      # we don't run it in CI because it needs ffmpeg + a Whisper venv.
+      - run: |
+          CGO_ENABLED=1 go build -o /tmp/subtitlesking .
+          ls -lh /tmp/subtitlesking

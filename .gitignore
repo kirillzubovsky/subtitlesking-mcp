@@ -1,8 +1,33 @@
 # Built binaries
+/subtitlesking
+/subtitlesking.exe
 /subtitlesking-mcp
 /subtitlesking-mcp.exe
 /dist/
 /bin/
+*.deployed
+*.new
+
+# Runtime state — never check this in
+/files/
+/videos.db
+/videos.db-journal
+/videos.db-wal
+/videos.db-shm
+
+# Python venv (Whisper) — bootstrapped by deploy.sh, ~5 GB
+/sk/
+
+# Certs / secrets
+/letsencrypt/
+/ssl/
+*.pem
+*.key
+.env
+.env.local
+
+# Deploy + ops artifacts
+deploy.log
 
 # Editor / OS noise
 .DS_Store
