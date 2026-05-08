@@ -439,16 +439,31 @@ func mcpGetTranscript(w http.ResponseWriter, r *http.Request, id any, rawArgs js
 		writeMCPErr(w, id, -32603, "database query error")
 		return
 	}
-	if !transcriptReady(status) {
-		writeMCPErr(w, id, -32603, "transcript not yet available: status="+status)
-		return
-	}
 
+	// The SRT file is the ground truth. Serve it whenever it's on disk —
+	// even if the burn step subsequently errored (e.g. ffmpeg missing
+	// libass), the transcript is still a complete, useful product. The
+	// README explicitly promises that transcript and burned video are
+	// independent; gating on status broke that promise.
 	srtPath := transcriptPath(videoID, file)
 	data, err := os.ReadFile(srtPath)
+	if os.IsNotExist(err) {
+		// File isn't on disk. Use the pipeline status to give a useful hint.
+		switch {
+		case status == "pending_upload":
+			writeMCPErr(w, id, -32603, "transcript not yet available: bytes have not arrived (status=pending_upload)")
+		case status == "new" || status == "compressing" || status == "compressed" || status == "generating_srt":
+			writeMCPErr(w, id, -32603, "transcript not yet available: pipeline at "+status+", check back in 30–60s")
+		case strings.HasPrefix(status, "error_"):
+			writeMCPErr(w, id, -32603, "transcript not available: pipeline errored at "+status+" before SRT was generated")
+		default:
+			writeMCPErr(w, id, -32603, "transcript not yet available: status="+status)
+		}
+		return
+	}
 	if err != nil {
 		log.Printf("mcpGetTranscript: read file error: %v", err)
-		writeMCPErr(w, id, -32603, "could not read transcript")
+		writeMCPErr(w, id, -32603, "could not read transcript: "+err.Error())
 		return
 	}
 

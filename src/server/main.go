@@ -475,10 +475,16 @@ func queuePositionAhead(db *sql.DB, status, createdAt string) int {
 }
 
 // transcriptReady reports whether the SRT transcript file has been written
-// to disk for a video at the given pipeline status.
+// to disk for a video at the given pipeline status. Includes
+// error_while_burning_subtitles because the SRT is generated *before*
+// the burn step — if burn fails (e.g. ffmpeg without libass), the
+// transcript is still complete and useful.
 func transcriptReady(status string) bool {
 	switch status {
-	case "srt_generated", "burning_subtitles", "subtitles_burned":
+	case "srt_generated",
+		"burning_subtitles",
+		"subtitles_burned",
+		"error_while_burning_subtitles":
 		return true
 	}
 	return false
