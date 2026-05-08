@@ -14,9 +14,71 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// preflightFFmpegHasSubtitlesFilter checks that the local ffmpeg build
+// includes the `subtitles` filter (which requires --enable-libass at
+// build time). The default `brew install ffmpeg` formula on macOS does
+// NOT include libass — users get a build that compresses fine but
+// cannot burn subtitles. Detect this up-front and fail with an
+// actionable message instead of letting ffmpeg exit 234 with a cryptic
+// "Error parsing filter description" message.
+func preflightFFmpegHasSubtitlesFilter() error {
+	out, err := exec.Command("ffmpeg", "-hide_banner", "-filters").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("could not run `ffmpeg -filters`: %w (is ffmpeg installed?)", err)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		// Output rows look like "TS. subtitles V->V Apply subtitles…".
+		// We just need the second whitespace-separated field == "subtitles".
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[1] == "subtitles" {
+			return nil
+		}
+	}
+	return fmt.Errorf(
+		"ffmpeg is installed but lacks the `subtitles` filter — your build was compiled without libass. " +
+			"On macOS, the default `brew install ffmpeg` formula no longer ships libass. Install the " +
+			"libass-enabled build with:\n\n" +
+			"    brew tap homebrew-ffmpeg/ffmpeg\n" +
+			"    brew install homebrew-ffmpeg/ffmpeg/ffmpeg\n\n" +
+			"Verify with:  ffmpeg -filters 2>&1 | grep -E '\\bsubtitles\\b'",
+	)
+}
+
+// escapeFFmpegFilterPath escapes the characters that ffmpeg's filter
+// description parser treats as syntax: backslash, colon (option separator),
+// comma (filter separator), single quote, and brackets (filterchain
+// labels). Backslash must be replaced first so we don't double-escape
+// the escape character we add for the others.
+//
+// Filter description grammar:
+//   filterchain = filter [, filter]*
+//   filter      = name [= options]
+//   options     = opt [: opt]*
+//   opt         = key=value
+// So `:` and `,` in a path turn into syntax errors unless escaped.
+//
+// This is filter-level escaping — distinct from shell escaping (which
+// we don't need here because exec.Command bypasses the shell).
+func escapeFFmpegFilterPath(p string) string {
+	// Order matters: backslash first.
+	p = strings.ReplaceAll(p, `\`, `\\`)
+	p = strings.ReplaceAll(p, `'`, `\'`)
+	p = strings.ReplaceAll(p, `:`, `\:`)
+	p = strings.ReplaceAll(p, `,`, `\,`)
+	p = strings.ReplaceAll(p, `[`, `\[`)
+	p = strings.ReplaceAll(p, `]`, `\]`)
+	return p
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("Usage:", os.Args[0], "<video_id>")
+		os.Exit(1)
+	}
+
+	if err := preflightFFmpegHasSubtitlesFilter(); err != nil {
+		fmt.Fprintln(os.Stderr, "Burn subtitles: preflight failed.")
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
@@ -64,12 +126,22 @@ func main() {
 		os.Exit(0)
 	}
 
-	// 6) Run ffmpeg with quiet logging and force output frame rate to 60 fps
-	// Escape special characters in the SRT path for FFMPEG
-	escapedSrtPath := fmt.Sprintf("'%s'", strings.ReplaceAll(srtFile, "'", "\\'"))
+	// 6) Run ffmpeg. Build the filter description carefully:
+	//   - The SRT path goes through filter-level escaping (no shell here,
+	//     so we must NOT wrap in literal '…'; ffmpeg ≥7 treats those as
+	//     part of the option value and chokes).
+	//   - force_style is a single string of comma-separated key=value
+	//     pairs. Once again, no surrounding quotes — exec.Command passes
+	//     the value literally to ffmpeg.
+	//
+	// Frame rate forced to 60 fps to keep the burned-in text crisp on
+	// high-fps source playback.
+	escapedSrtPath := escapeFFmpegFilterPath(srtFile)
+	const forceStyle = "Fontsize=12,BorderStyle=3,PrimaryColour=&HFFFFFF&,BackColour=&H000000&,MarginV=10"
+	filterDesc := fmt.Sprintf("subtitles=%s:force_style=%s", escapedSrtPath, forceStyle)
 
 	cmd := exec.Command("ffmpeg", "-loglevel", "error", "-i", inputFile,
-		"-vf", fmt.Sprintf("subtitles=%s:force_style='Fontsize=12,BorderStyle=3,PrimaryColour=&HFFFFFF&,BackColour=&H000000&,MarginV=10'", escapedSrtPath),
+		"-vf", filterDesc,
 		"-r", "60",
 		outputFile)
 	// Capture both stdout and stderr
