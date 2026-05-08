@@ -137,7 +137,13 @@ func main() {
 	// Frame rate forced to 60 fps to keep the burned-in text crisp on
 	// high-fps source playback.
 	escapedSrtPath := escapeFFmpegFilterPath(srtFile)
-	const forceStyle = "Fontsize=12,BorderStyle=3,PrimaryColour=&HFFFFFF&,BackColour=&H000000&,MarginV=10"
+	// Force-style commas must be escaped: ffmpeg's filter parser treats `,`
+	// as a filter-chain separator. Without `\,` between the key=value
+	// pairs, the parser reads the value as ending at the first comma and
+	// tries to apply `BorderStyle=3` as a separate filter — which fails
+	// with "No option name near …". Backslash-escape every comma so the
+	// whole force_style value reaches libass intact.
+	const forceStyle = `Fontsize=12\,BorderStyle=3\,PrimaryColour=&HFFFFFF&\,BackColour=&H000000&\,MarginV=10`
 	filterDesc := fmt.Sprintf("subtitles=%s:force_style=%s", escapedSrtPath, forceStyle)
 
 	cmd := exec.Command("ffmpeg", "-loglevel", "error", "-i", inputFile,
