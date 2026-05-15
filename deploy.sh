@@ -411,6 +411,11 @@ Environment=GOPATH=/root/go
 Environment=GOMODCACHE=/root/go/pkg/mod
 Environment=GOCACHE=/root/.cache/go-build
 
+# Whisper model cache is shared across services on this VPS (~5GB of .pt files).
+# Without this, whisper defaults to ~/.cache/whisper and silently re-downloads
+# every model — wasting ~5GB and duplicating what transcriptking already has.
+Environment=XDG_CACHE_HOME=/root/cache/whisper
+
 # Free-tier limits + worker pool (tune via redeploy). Prefix avoids clashes
 # on the shared VPS — see DEPLOY-SCRIPT-GUIDE.md.
 Environment=SUBTITLESKING_WHISPER_MODEL=${SUBTITLESKING_WHISPER_MODEL}

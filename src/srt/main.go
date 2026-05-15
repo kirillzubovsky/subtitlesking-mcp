@@ -45,8 +45,16 @@ var validWhisperModels = map[string]bool{
 	"base": true, "base.en": true,
 	"small": true, "small.en": true,
 	"medium": true, "medium.en": true,
-	"large": true, "large-v1": true, "large-v2": true, "large-v3": true,
+	"large": true, "large-v1": true, "large-v2": true, "large-v3": true, "large-v3-turbo": true,
 }
+
+// largeModelAlias is the concrete whisper model we substitute when the user
+// (or env var) asks for "large" or "large-v3". The turbo variant is ~1.6GB
+// instead of ~3GB, ~8× faster on CPU, with marginal English accuracy loss —
+// the right default for our use case. Users who explicitly want the older
+// model can pass "large-v3-turbo" or any other specific variant; only the
+// generic alias is redirected.
+const largeModelAlias = "large-v3-turbo"
 
 // resolveWhisperModel picks the whisper model name to invoke for one
 // transcription. Precedence:
@@ -55,12 +63,16 @@ var validWhisperModels = map[string]bool{
 //  3. "medium" (sensible balance of quality/speed on CPU)
 // Unknown values fall through to the next layer instead of erroring,
 // so a typo in an env var doesn't stall the pipeline.
+// Generic "large"/"large-v3" requests are aliased to large-v3-turbo.
 func resolveWhisperModel(rowOverride string) string {
 	for _, candidate := range []string{
 		strings.TrimSpace(rowOverride),
 		strings.TrimSpace(os.Getenv("SUBTITLESKING_WHISPER_MODEL")),
 	} {
 		if candidate != "" && validWhisperModels[candidate] {
+			if candidate == "large" || candidate == "large-v3" {
+				return largeModelAlias
+			}
 			return candidate
 		}
 	}

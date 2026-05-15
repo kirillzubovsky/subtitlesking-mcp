@@ -318,7 +318,9 @@ func mcpStartUpload(w http.ResponseWriter, r *http.Request, id any, rawArgs json
 	if whisperModel == "base" {
 		timingHint = "under 1 min"
 	} else if whisperModel == "large" {
-		timingHint = "7–15 min"
+		// "large" is aliased to large-v3-turbo at the invocation point
+		// (src/srt/main.go). ~8× faster than large-v3 on CPU.
+		timingHint = "1–3 min"
 	}
 
 	log.Printf("mcpStartUpload: reserved videoID=%s authToken=%s filename=%s quality=%s model=%q",
